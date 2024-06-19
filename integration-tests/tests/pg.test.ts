@@ -25,13 +25,21 @@ import {
 	min,
 	name,
 	or,
+	phraseto_tsquery,
 	placeholder,
+	plainto_tsquery,
+	setweight,
 	type SQL,
 	sql,
 	type SQLWrapper,
 	sum,
 	sumDistinct,
+	to_tsquery,
+	to_tsvector,
 	TransactionRollbackError,
+	ts_rank,
+	ts_rank_cd,
+	websearch_to_tsquery,
 } from 'drizzle-orm';
 import { drizzle, type NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { migrate } from 'drizzle-orm/node-postgres/migrator';
@@ -4342,4 +4350,263 @@ test.serial('test if method with sql operators', async (t) => {
 	]);
 
 	await db.execute(sql`drop table ${users}`);
+});
+
+test.serial('test queries with to_tsvector & to_tsquery helper functions', async (t) => {
+	const { db } = t.context;
+
+	const document = 'Hello, World!';
+
+	const rawTsVectorResult = await db.execute(sql`select to_tsvector(${document})`);
+	const helperTsVectorResult = await db.execute(sql`select ${to_tsvector(document)}`);
+
+	t.deepEqual(rawTsVectorResult.rows[0], helperTsVectorResult.rows[0]);
+
+	const documentQuery = 'Hello';
+	const rawQueryResult = await db.execute(sql`select to_tsvector(${document}) @@ to_tsquery(${documentQuery})`);
+	const helperQueryResult = await db.execute(sql`select ${to_tsvector(document)} @@ ${to_tsquery(documentQuery)}`);
+
+	t.deepEqual(rawQueryResult.rows[0], helperQueryResult.rows[0]);
+
+	const posts = pgTable('posts', {
+		id: serial('id').primaryKey(),
+		title: text('title').notNull(),
+	});
+
+	await db.execute(sql`drop table if exists ${posts}`);
+
+	await db.execute(
+		sql`
+			create table ${posts} (
+			id serial primary key,
+			title text not null
+			)
+		`,
+	);
+
+	await db.insert(posts).values([{
+		title: 'Football match',
+	}, {
+		title: 'Basketball match',
+	}, {
+		title: 'Hockey match',
+	}]);
+
+	const title = 'football';
+
+	const englishRawResult = await db.select().from(posts)
+		.where(sql`to_tsvector('english', ${posts.title}) @@ to_tsquery('english', ${title})`);
+
+	const englishHelperResult = await db
+		.select()
+		.from(posts)
+		.where(sql`${to_tsvector('english', posts.title)} @@ ${to_tsquery('english', title)}`);
+
+	t.deepEqual(englishRawResult, englishHelperResult);
+
+	const title2 = 'hockey';
+	const simpleRawResult = await db.select().from(posts).where(
+		sql`to_tsvector('simple', ${posts.title}) @@ to_tsquery('simple', ${title2})`,
+	);
+	const simpleHelperResult = await db.select().from(posts).where(
+		sql`${to_tsvector('simple', posts.title)} @@ ${to_tsquery('simple', title2)}`,
+	);
+
+	t.deepEqual(simpleRawResult, simpleHelperResult);
+});
+
+test.serial('test queries with plainto_tsquery & phraseto_tsquery & websearch_to_tsquery helper functions', async (t) => {
+	const { db } = t.context;
+
+	const posts = pgTable('posts', {
+		id: serial('id').primaryKey(),
+		title: text('title').notNull(),
+		content: text('content').notNull(),
+	});
+
+	await db.execute(sql`drop table if exists ${posts}`);
+
+	await db.execute(
+		sql`
+			create table ${posts} (
+			id serial primary key,
+			title text not null,
+			content text not null
+			)
+		`,
+	);
+
+	await db.insert(posts).values([{
+		title: 'Fast Browser',
+		content: 'This new browser loads very quickly and offers enhanced security features.',
+	}, {
+		title: 'How to Cook Risotto',
+		content: 'Recipe for making risotto with mushrooms and white wine. Cooking time is about 20 minutes.',
+	}, {
+		title: 'Tips for Beginner Photographers',
+		content:
+			'Top 10 tips for beginner photographers, including choosing equipment and understanding composition basics.',
+	}, {
+		title: 'Updates in Python 3.9',
+		content: 'New features in Python 3.9 include dictionary merge, improvements in type annotations, and more.',
+	}, {
+		title: 'Traveling in Italy',
+		content: 'Explore Rome, Venice, and Florence. Enjoy Italian cuisine, art, and history.',
+	}]);
+
+	const plainRawResult = await db.select().from(posts).where(
+		sql`to_tsvector('english', ${posts.title}) @@ plainto_tsquery('english', 'fast browser')`,
+	);
+	const plainHelperResult = await db.select().from(posts).where(
+		sql`${to_tsvector('english', posts.title)} @@ ${plainto_tsquery('english', 'fast browser')}`,
+	);
+
+	t.deepEqual(plainRawResult, plainHelperResult);
+
+	const phraseRawResult = await db.select().from(posts).where(
+		sql`to_tsvector('english', ${posts.title}) @@ phraseto_tsquery('english', 'tips updates')`,
+	);
+	const phraseHelperResult = await db.select().from(posts).where(
+		sql`${to_tsvector('english', posts.title)} @@ ${phraseto_tsquery('english', 'tips updates')}`,
+	);
+
+	t.deepEqual(phraseRawResult, phraseHelperResult);
+
+	const websearchRawResult = await db.select().from(posts).where(
+		sql`to_tsvector('english', ${posts.title}) @@ websearch_to_tsquery('english', 'tips or updates Python')`,
+	);
+	const websearchHelperResult = await db.select().from(posts).where(
+		sql`${to_tsvector('english', posts.title)} @@ ${websearch_to_tsquery('english', 'tips or updates Python')}`,
+	);
+
+	t.deepEqual(websearchRawResult, websearchHelperResult);
+});
+
+test.serial('test queries with setweight & ts_rank & ts_rank_cd helper functions', async (t) => {
+	const { db } = t.context;
+
+	const posts = pgTable('posts', {
+		id: serial('id').primaryKey(),
+		title: text('title').notNull(),
+		content: text('content').notNull(),
+	});
+
+	await db.execute(sql`drop table if exists ${posts}`);
+
+	await db.execute(
+		sql`
+			create table ${posts} (
+			id serial primary key,
+			title text not null,
+			content text not null
+			)
+		`,
+	);
+
+	await db.insert(posts).values([{
+		title: 'Advanced Search Techniques',
+		content: 'Learning how to use advanced search techniques can significantly improve query performance.',
+	}, {
+		title: 'Database Optimization',
+		content: 'Optimizing database performance involves careful planning and testing.',
+	}, {
+		title: 'Machine Learning Applications',
+		content:
+			'Machine learning can be applied to a vast array of problems, from speech recognition to predicting stock prices.',
+	}]);
+
+	const directWeightedVectorTitle = sql`setweight(to_tsvector('english', ${posts.title}), 'A')`;
+	const directWeightedVectorContent = sql`setweight(to_tsvector('english', ${posts.content}), 'B')`;
+
+	const helperWeightedVectorTitle = setweight(sql`to_tsvector('english', ${posts.title})`, 'A');
+	const helperWeightedVectorContent = setweight(sql`to_tsvector('english', ${posts.content})`, 'B');
+
+	const directSearchQuery = sql`plainto_tsquery('english', 'advanced search')`;
+	const helperSearchQuery = plainto_tsquery('english', 'advanced search');
+
+	const directResult = await db.select().from(posts).where(
+		sql`(${directWeightedVectorTitle} || ${directWeightedVectorContent}) @@ ${directSearchQuery}`,
+	);
+	const helperResult = await db.select().from(posts).where(
+		sql`(${helperWeightedVectorTitle} || ${helperWeightedVectorContent}) @@ ${helperSearchQuery}`,
+	);
+
+	t.deepEqual(directResult, helperResult);
+
+	const directTsRank =
+		sql`ts_rank((${directWeightedVectorTitle} || ${directWeightedVectorContent}), ${directSearchQuery})`;
+	const helperTsRank = ts_rank(
+		sql`(${helperWeightedVectorTitle} || ${helperWeightedVectorContent})`,
+		helperSearchQuery,
+	);
+
+	const directTsRankResult = await db.select({
+		post: posts,
+		rank: directTsRank,
+	}).from(posts).where(gt(directTsRank, 0));
+	const helperTsRankResult = await db.select({
+		post: posts,
+		rank: helperTsRank,
+	}).from(posts).where(gt(helperTsRank, 0));
+
+	t.deepEqual(directTsRankResult, helperTsRankResult);
+
+	const weights = [0.1, 0.2, 0.4, 1];
+	const directTsRankWeight = sql`ts_rank(string_to_array(${
+		weights.join(',')
+	}, ',')::float4[], (${helperWeightedVectorTitle} || ${helperWeightedVectorContent}), ${directSearchQuery})`;
+	const helperTsRankWeight = ts_rank(
+		weights,
+		sql`(${helperWeightedVectorTitle} || ${helperWeightedVectorContent})`,
+		helperSearchQuery,
+	);
+
+	const directTsRankWeightedResult = await db.select({
+		post: posts,
+		rank: directTsRankWeight,
+	}).from(posts).where(gt(directTsRankWeight, 0));
+	const helperTsRankWeightedResult = await db.select({
+		post: posts,
+		rank: helperTsRankWeight,
+	}).from(posts).where(gt(helperTsRankWeight, 0));
+
+	t.deepEqual(directTsRankWeightedResult, helperTsRankWeightedResult);
+
+	const directTsRankCd =
+		sql`ts_rank_cd((${helperWeightedVectorTitle} || ${helperWeightedVectorContent}), ${directSearchQuery})`;
+	const helperTsRankCd = ts_rank_cd(
+		sql`(${helperWeightedVectorTitle} || ${helperWeightedVectorContent})`,
+		helperSearchQuery,
+	);
+
+	const directTsRankCdResult = await db.select({
+		post: posts,
+		rank: directTsRankCd,
+	}).from(posts).where(gt(directTsRankCd, 0));
+	const helperTsRankCdResult = await db.select({
+		post: posts,
+		rank: helperTsRankCd,
+	}).from(posts).where(gt(helperTsRankCd, 0));
+
+	t.deepEqual(directTsRankCdResult, helperTsRankCdResult);
+
+	const directTsRankCdWeighted = sql`ts_rank_cd(string_to_array(${
+		weights.join(',')
+	}, ',')::float4[], (${helperWeightedVectorTitle} || ${helperWeightedVectorContent}), ${directSearchQuery})`;
+	const helperTsRankCdWeighted = ts_rank_cd(
+		weights,
+		sql`(${helperWeightedVectorTitle} || ${helperWeightedVectorContent})`,
+		helperSearchQuery,
+	);
+
+	const directTsRankCdWeightedResult = await db.select({
+		post: posts,
+		rank: directTsRankCdWeighted,
+	}).from(posts).where(gt(directTsRankCdWeighted, 0));
+	const helperTsRankCdWeightedResult = await db.select({
+		post: posts,
+		rank: helperTsRankCdWeighted,
+	}).from(posts).where(gt(directTsRankCdWeighted, 0));
+
+	t.deepEqual(directTsRankCdWeightedResult, helperTsRankCdWeightedResult);
 });
