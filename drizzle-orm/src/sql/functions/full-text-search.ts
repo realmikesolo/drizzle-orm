@@ -24,7 +24,6 @@ type Configuration =
 	| 'norwegian'
 	| 'portuguese'
 	| 'romanian'
-	| 'russian'
 	| 'serbian'
 	| 'spanish'
 	| 'swedish'
@@ -58,8 +57,8 @@ export function to_tsvector(document: AnyPgColumn | string): SQL;
  * await db.select({ value: to_tsvector('english', posts.title) }).from(posts);
  * ```
  */
-export function to_tsvector(configuration: Configuration | string, document: AnyPgColumn | string): SQL;
-export function to_tsvector(arg1: Configuration | AnyPgColumn | string, arg2?: AnyPgColumn | string): SQL {
+export function to_tsvector(configuration: Configuration | string & {}, document: AnyPgColumn | string): SQL;
+export function to_tsvector(arg1: Configuration | AnyPgColumn | string & {}, arg2?: AnyPgColumn | string): SQL {
 	return arg2 ? sql`to_tsvector(${arg1}, ${arg2})` : sql`to_tsvector(${arg1})`;
 }
 
@@ -87,8 +86,8 @@ export function to_tsquery(query: string): SQL;
  * await db.select().from(posts).where(sql`${to_tsvector('english', posts.title)} @@ ${to_tsquery('english', 'Drizzle')}`);
  * ```
  */
-export function to_tsquery(configuration: Configuration | string, query: string): SQL;
-export function to_tsquery(arg1: Configuration | string, arg2?: string): SQL {
+export function to_tsquery(configuration: Configuration | string & {}, query: string): SQL;
+export function to_tsquery(arg1: Configuration | string & {}, arg2?: string): SQL {
 	return arg2 ? sql`to_tsquery(${arg1}, ${arg2})` : sql`to_tsquery(${arg1})`;
 }
 
@@ -120,8 +119,8 @@ export function plainto_tsquery(query: string): SQL;
  * await db.select().from(posts).where(sql`${to_tsvector('english', posts.title)} @@ ${plainto_tsquery('english', 'PostgreSQL MySQL SQLite')}`);
  * ```
  */
-export function plainto_tsquery(configuration: Configuration | string, query: string): SQL;
-export function plainto_tsquery(arg1: Configuration | string, arg2?: string): SQL {
+export function plainto_tsquery(configuration: Configuration | string & {}, query: string): SQL;
+export function plainto_tsquery(arg1: Configuration | string & {}, arg2?: string): SQL {
 	return arg2 ? sql`plainto_tsquery(${arg1}, ${arg2})` : sql`plainto_tsquery(${arg1})`;
 }
 
@@ -153,8 +152,8 @@ export function phraseto_tsquery(query: string): SQL;
  * await db.select().from(posts).where(sql`${to_tsvector('english', posts.title)} @@ ${phraseto_tsquery('english', 'Drizzle best practice')}`);
  * ```
  */
-export function phraseto_tsquery(configuration: Configuration | string, query: string): SQL;
-export function phraseto_tsquery(arg1: Configuration | string, arg2?: string): SQL {
+export function phraseto_tsquery(configuration: Configuration | string & {}, query: string): SQL;
+export function phraseto_tsquery(arg1: Configuration | string & {}, arg2?: string): SQL {
 	return arg2 ? sql`phraseto_tsquery(${arg1}, ${arg2})` : sql`phraseto_tsquery(${arg1})`;
 }
 
@@ -186,8 +185,8 @@ export function websearch_to_tsquery(query: string): SQL;
  * await db.select().from(posts).where(sql`${to_tsvector('english', posts.title)} @@ ${websearch_to_tsquery('english', 'tips or updates Drizzle')}`);
  * ```
  */
-export function websearch_to_tsquery(configuration: Configuration | string, query: string): SQL;
-export function websearch_to_tsquery(arg1: Configuration | string, arg2?: string): SQL {
+export function websearch_to_tsquery(configuration: Configuration | string & {}, query: string): SQL;
+export function websearch_to_tsquery(arg1: Configuration | string & {}, arg2?: string): SQL {
 	return arg2 ? sql`websearch_to_tsquery(${arg1}, ${arg2})` : sql`websearch_to_tsquery(${arg1})`;
 }
 
@@ -303,6 +302,6 @@ export function ts_rank_cd(arg1: number[] | SQL, arg2: SQL | number, arg3?: SQL 
  * await db.select().from(posts).where(sql`(${weightedVectorTitle} || ${weightedVectorDescription}) @@ ${query}`);
  * ```
  */
-export function setweight(vector: SQL, weight: Weight): SQL {
+export function setweight(vector: SQL, weight: Weight | string & {}): SQL {
 	return sql`setweight(${vector}, ${weight})`;
 }
